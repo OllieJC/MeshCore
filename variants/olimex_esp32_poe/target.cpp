@@ -11,8 +11,20 @@ ESPNOWRadio radio_driver;
 ESP32RTCClock rtc_clock;
 EnvironmentSensorManager sensors;
 
-#ifdef ETHERNET_ENABLED
 bool OlimexPoEBoard::handleCommand(const char* command, uint32_t timestamp, char* reply) {
+#if ENV_INCLUDE_PMSA003I
+  if (strcmp(command, "pm") == 0) {
+    PM25_AQI_Data sample;
+    if (sensors.readPMSA003I(sample)) {
+      snprintf(reply, 64, "PM1.0=%u PM2.5=%u PM10=%u (µg/m³)",
+               sample.pm10_env, sample.pm25_env, sample.pm100_env);
+    } else {
+      strcpy(reply, "PMSA003I unavailable");
+    }
+    return true;
+  }
+#endif
+#ifdef ETHERNET_ENABLED
   if (strcmp(command, "eth.status") != 0) return false;
 
   if (!(WiFi.getStatusBits() & ETH_STARTED_BIT)) {
@@ -23,8 +35,10 @@ bool OlimexPoEBoard::handleCommand(const char* command, uint32_t timestamp, char
     snprintf(reply, 64, "%u Mbps, %s:%u", ETH.linkSpeed(), ETH.localIP().toString().c_str(), ETHERNET_TCP_PORT);
   }
   return true;
-}
+#else
+  return false;
 #endif
+}
 
 bool radio_init() {
   // Keep the PHY off until an Ethernet build starts the RMII clock.

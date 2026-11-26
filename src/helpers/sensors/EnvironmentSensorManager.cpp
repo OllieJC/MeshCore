@@ -46,6 +46,10 @@ static uint32_t bsec_last_save_ms    = 0;
 static Adafruit_BME680 BME680(TELEM_WIRE);
 #endif
 
+#if ENV_INCLUDE_PMSA003I
+#include "LPPDataHelpers.h"
+#endif
+
 #ifdef ENV_INCLUDE_BMP085
 #define TELEM_BMP085_SEALEVELPRESSURE_HPA (1013.25)
 #include <Adafruit_BMP085.h>
@@ -214,6 +218,25 @@ static void query_bme680(uint8_t ch, uint8_t, CayenneLPP& lpp) {
     lpp.addBarometricPressure(ch, pressure_hpa);
     lpp.addAltitude(ch, 44330.0f * (1.0f - powf(pressure_hpa / (float)TELEM_BME680_SEALEVELPRESSURE_HPA, 0.1903f)));
     lpp.addGenericSensor(ch, BME680.gas_resistance);
+  }
+}
+#endif
+
+#if ENV_INCLUDE_PMSA003I
+bool EnvironmentSensorManager::readPMSA003I(PM25_AQI_Data& sample) {
+  static Adafruit_PM25AQI_I2C sensor;
+  static bool ready = false;
+  // Probe on demand because the PMSA003I can still be starting up during the boot scan.
+  if (!ready) ready = sensor.begin(TELEM_WIRE);
+  return ready && sensor.read(&sample);
+}
+
+static void addParticulateMatter(CayenneLPP& lpp, uint8_t channel, const PM25_AQI_Data& sample) {
+  // CayenneLPP has no raw append API. Reserve one complete eight-byte record before writing it.
+  const uint8_t offset = lpp.getSize();
+  if (lpp.addAccelerometer(channel, 0, 0, 0)) {
+    LPPWriter writer(lpp.getBuffer() + offset, lpp.getSize() - offset);
+    writer.writeParticulateMatter(channel, sample.pm10_env, sample.pm25_env, sample.pm100_env);
   }
 }
 #endif
@@ -647,6 +670,12 @@ bool EnvironmentSensorManager::querySensors(uint8_t requester_permissions, Cayen
       _active_sensors[i].query(next_available_channel, _active_sensors[i].sub_channel, telemetry);
       next_available_channel++;
     }
+    #if ENV_INCLUDE_PMSA003I
+    PM25_AQI_Data sample;
+    if (readPMSA003I(sample)) {
+      addParticulateMatter(telemetry, next_available_channel, sample);
+    }
+    #endif
   }
 
   return true;

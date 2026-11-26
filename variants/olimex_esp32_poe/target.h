@@ -7,9 +7,7 @@
 class OlimexPoEBoard : public ESP32Board {
 public:
   const char* getManufacturerName() const override { return "Olimex ESP32-PoE (ESP-NOW)"; }
-#ifdef ETHERNET_ENABLED
   bool handleCommand(const char* command, uint32_t timestamp, char* reply) override;
-#endif
 };
 
 extern OlimexPoEBoard board;

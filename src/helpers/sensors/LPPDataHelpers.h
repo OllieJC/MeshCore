@@ -28,6 +28,7 @@
 #define LPP_COLOUR 135              // 1 byte per RGB Color
 #define LPP_GPS 136                 // 3 byte lon/lat 0.0001 °, 3 bytes alt 0.01 meter
 #define LPP_SWITCH 142              // 1 byte, 0/1
+#define LPP_AIR_QUALITY 228         // 6 bytes, PM1.0/PM2.5/PM10, 2 bytes each, 1 µg/m³ unsigned (fork-specific)
 #define LPP_POLYLINE 240            // 1 byte size, 1 byte delta factor, 3 byte lon/lat 0.0001° * factor, n (size-8) bytes deltas
 
 // Multipliers
@@ -73,6 +74,7 @@ public:
         return 8;  // TODO: this is MINIMIUM
       case LPP_GYROMETER:
       case LPP_ACCELEROMETER:
+      case LPP_AIR_QUALITY:
         return 6;
       case LPP_GENERIC_SENSOR:
       case LPP_FREQUENCY:
@@ -88,7 +90,6 @@ public:
       case LPP_TEMPERATURE:
       case LPP_CONCENTRATION:
       case LPP_BAROMETRIC_PRESSURE:
-      case LPP_RELATIVE_HUMIDITY:
       case LPP_ALTITUDE:
       case LPP_VOLTAGE:
       case LPP_CURRENT:
@@ -111,8 +112,9 @@ public:
         return 100;
       case LPP_TEMPERATURE:
       case LPP_BAROMETRIC_PRESSURE:
-      case LPP_RELATIVE_HUMIDITY:
         return 10;
+      case LPP_RELATIVE_HUMIDITY:
+        return LPP_RELATIVE_HUMIDITY_MULT;
     }
     return 1;
   }
@@ -212,6 +214,14 @@ public:
     pa = LPPData::getFloat(&_buf[_pos], 2, 10, false); _pos += 2;
     return _pos <= _len;
   }
+  bool readParticulateMatter(uint16_t& pm1, uint16_t& pm25, uint16_t& pm10) {
+    if (_pos + 6 > _len) return false;
+    pm1  = (uint16_t(_buf[_pos]) << 8) | _buf[_pos + 1];
+    pm25 = (uint16_t(_buf[_pos + 2]) << 8) | _buf[_pos + 3];
+    pm10 = (uint16_t(_buf[_pos + 4]) << 8) | _buf[_pos + 5];
+    _pos += 6;
+    return true;
+  }
   bool readRelativeHumidity(float& pct) {
     pct = LPPData::getFloat(&_buf[_pos], 1, 2, false); _pos += 1;
     return _pos <= _len;
@@ -240,6 +250,7 @@ public:
   LPPWriter(uint8_t buf[], uint8_t max_len): _buf(buf), _max_len(max_len), _len(0) { }
 
   bool writeData(uint8_t channel, uint8_t type, float v) {
+    if (type == LPP_AIR_QUALITY) return false;  // requires three values
     uint8_t sz = LPPData::getDataSize(type);
     bool s = LPPData::isSigned(type);
     uint32_t mul = LPPData::getMultiplier(type);
@@ -261,6 +272,16 @@ public:
       return true;
     }
     return false;
+  }
+
+  bool writeParticulateMatter(uint8_t channel, uint16_t pm1, uint16_t pm25, uint16_t pm10) {
+    if (_len + 8 > _max_len) return false;
+    _buf[_len++] = channel;
+    _buf[_len++] = LPP_AIR_QUALITY;
+    write(pm1);
+    write(pm25);
+    write(pm10);
+    return true;
   }
 
   bool writeGPS(uint8_t channel, float lat, float lon, float alt) {
