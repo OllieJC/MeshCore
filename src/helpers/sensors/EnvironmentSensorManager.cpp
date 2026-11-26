@@ -281,6 +281,60 @@ static void query_sht4x(uint8_t ch, uint8_t, CayenneLPP& lpp) {
 }
 #endif
 
+#if ENV_INCLUDE_SCD41
+static constexpr uint8_t SCD41_ADDRESS = 0x62;
+
+static bool scd41Command(TwoWire& wire, uint16_t command) {
+  wire.beginTransmission(SCD41_ADDRESS);
+  wire.write(uint8_t(command >> 8));
+  wire.write(uint8_t(command));
+  return wire.endTransmission() == 0;
+}
+
+// Each SCD4x response word is big-endian and followed by its own CRC-8.
+static bool scd41ReadWord(TwoWire& wire, uint16_t command, uint16_t& value) {
+  if (!scd41Command(wire, command)) return false;
+  delay(1);
+  if (wire.requestFrom(SCD41_ADDRESS, uint8_t(3)) != 3) return false;
+  const uint8_t bytes[] = {uint8_t(wire.read()), uint8_t(wire.read())};
+  uint8_t crc = 0xFF;
+  for (uint8_t byte : bytes) {
+    crc ^= byte;
+    for (int bit = 0; bit < 8; bit++) {
+      crc = (crc & 0x80) ? (crc << 1) ^ 0x31 : crc << 1;
+    }
+  }
+  if (wire.read() != crc) return false;
+  value = (uint16_t(bytes[0]) << 8) | bytes[1];
+  return true;
+}
+
+static uint8_t init_scd41(TwoWire* wire, uint8_t) {
+  scd41Command(*wire, 0x36F6);  // Wake up (no ACK).
+  delay(30);
+  scd41Command(*wire, 0x3F86);  // Stop any measurement left running across a board reset.
+  delay(500);
+  uint16_t serial_prefix;  // Verify the first word of the serial number before starting.
+  if (!scd41ReadWord(*wire, 0x3682, serial_prefix)) return 0;
+  return scd41Command(*wire, 0x21B1) ? 1 : 0;  // Start 5-second periodic measurements.
+}
+
+static void query_scd41(uint8_t ch, uint8_t, CayenneLPP& lpp) {
+  static uint16_t co2_ppm = 0;
+  static uint32_t last_sample_ms = 0;
+  uint16_t status;
+  if (!scd41ReadWord(*TELEM_WIRE, 0xE4B8, status)) return;
+  if (status & 0x07FF) {  // A nonzero value in the low 11 bits means a sample is ready.
+    if (!scd41ReadWord(*TELEM_WIRE, 0xEC05, co2_ppm)) return;
+    last_sample_ms = millis();
+  }
+  // A read consumes the sample. Share it with other clients for one measurement interval.
+  if (co2_ppm != 0 && millis() - last_sample_ms < 5000) {
+    lpp.addConcentration(ch, co2_ppm);
+  }
+}
+#endif
+
 #if ENV_INCLUDE_LPS22HB
 static uint8_t init_lps22hb(TwoWire*, uint8_t) {
   // LPS22HBClass is constructed with the wire reference; begin() uses it.
@@ -563,6 +617,9 @@ static const SensorDef SENSOR_TABLE[] = {
 #if ENV_INCLUDE_RAK12035
   { TELEM_RAK12035_ADDRESS,"RAK12035",     init_rak12035, query_rak12035 },
 #endif
+#if ENV_INCLUDE_SCD41
+  { SCD41_ADDRESS,         "SCD41",        init_scd41,    query_scd41    },
+#endif
   { 0, nullptr, nullptr, nullptr }  // sentinel — keeps the array non-empty
 };
 
@@ -592,6 +649,12 @@ bool EnvironmentSensorManager::begin() {
   Wire1.begin(ENV_PIN_SDA, ENV_PIN_SCL, 100000);
     #endif
   MESH_DEBUG_PRINTLN("Second I2C initialized on pins SDA: %d SCL: %d", ENV_PIN_SDA, ENV_PIN_SCL);
+  #endif
+
+  #if ENV_INCLUDE_SCD41
+  // The SCD41 needs up to one second after power-on to acknowledge its address.
+  const uint32_t uptime_ms = millis();
+  if (uptime_ms < 1000) delay(1000 - uptime_ms);
   #endif
 
   // Scan the I2C bus before touching any sensor library.
