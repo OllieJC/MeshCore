@@ -5,7 +5,12 @@
 
 #ifdef ETHERNET_ENABLED
   #define ETHERNET_CLI_BANNER "MeshCore Repeater CLI"
-  #include <helpers/nrf52/EthernetCLI.h>
+  #ifdef ETHERNET_USE_ESP32_EMAC
+    #include <helpers/ethernet/ESP32EthernetCLI.h>
+    static ESP32EthernetCLI ethernet_cli(ETHERNET_TCP_PORT);
+  #else
+    #include <helpers/nrf52/EthernetCLI.h>
+  #endif
 #endif
 
 StdRNG fast_rng;
@@ -106,7 +111,11 @@ void setup() {
 #endif
 
 #ifdef ETHERNET_ENABLED
+  #ifdef ETHERNET_USE_ESP32_EMAC
+  ethernet_cli.begin();
+  #else
   ethernet_start_task();
+  #endif
 #endif
 
   // send out initial zero hop Advertisement to the mesh
@@ -146,7 +155,7 @@ void loop() {
     command[len - 1] = 0;  // replace newline with C string null terminator
     char reply[160];
     reply[0] = 0;
-#ifdef ETHERNET_ENABLED
+#if defined(ETHERNET_ENABLED) && !defined(ETHERNET_USE_ESP32_EMAC)
     if (!ethernet_handle_command(command, reply)) {
       the_mesh.handleCommand(0, command, reply);
     }
@@ -162,7 +171,13 @@ void loop() {
 
   board.loop();   // let the board feed its watchdog, run periodic housekeeping
 
-#ifdef ETHERNET_ENABLED
+#if defined(ETHERNET_USE_ESP32_EMAC)
+  if (ethernet_cli.readCommand(ethernet_command, sizeof(ethernet_command), the_mesh.getNodePrefs()->password)) {
+    char reply[160] = {};
+    the_mesh.handleCommand(0, ethernet_command, reply);
+    ethernet_cli.sendReply(reply);
+  }
+#elif defined(ETHERNET_ENABLED)
   ethernet_loop_maintain();
   if (ethernet_read_line(ethernet_command, sizeof(ethernet_command))) {
     char reply[160];
