@@ -12,6 +12,34 @@ PM1.0, PM2.5 and PM10 in µg/m³. The fourth chat line gives the three readings 
 that order. The MeshCore telemetry reply uses the feature branch's eight-byte
 LPP record (type 228). The USB command `pm` prints a fresh reading.
 
+## Channel watch
+
+Use the USB CLI or the node's admin CLI in MeshCore. Changes take effect immediately
+and survive a reboot. The node starts with watch on and rule 1 set to
+`#m7ojc wx,sensor,sensors`. You can delete this rule like any other.
+
+```text
+sensor.watch
+sensor.watch add #m7ojc wx,sensor
+sensor.watch add #weather wx da7*,wx bexley*,wx m7ojc
+sensor.watch list
+sensor.watch del 2
+sensor.watch off
+sensor.watch on
+```
+
+Each `add` creates one numbered rule. The CLI, hashtag names and request patterns
+accept any mix of ASCII upper and lower case. Commas separate alternatives. Each
+pattern matches a whole single-line chat message, ignoring surrounding spaces.
+`*` matches zero or more characters. On `#weather`, the rule above accepts
+`WX DA7`, `wx Bexleyheath` and `Wx M7OJC`. A match sends one weather report back
+to the same channel, even if several rules match.
+
+`sensor.watch` shows the on/off state and rule count. Turning it off keeps the
+rules. Up to eight rules fit, each with up to 127 bytes for the hashtag, space
+and patterns together. IDs stay fixed until deletion. When a list ends with
+`next=4`, use `sensor.watch list 4` for the next page.
+
 ## Home Assistant
 
 Open the node's USB serial console at 115200 baud and enter one command per line.

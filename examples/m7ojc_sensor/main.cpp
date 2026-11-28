@@ -1,39 +1,45 @@
 #include "../simple_sensor/SensorMesh.h"
 #include "MqttTelemetry.h"
+#include "SensorWatch.h"
 #include <helpers/BaseChatMesh.h>
 #include <helpers/ntp/NtpClock.h>
+#include <Preferences.h>
 #include <WiFi.h>
 
 static MqttTelemetry mqtt;
 
+class WatchSettings : public KeyValueStore {
+  Preferences prefs;
+public:
+  bool begin() { return prefs.begin("sensor-watch", false); }
+  bool getByKey(const char* key, char* value, size_t size) override {
+    return prefs.isKey(key) && prefs.getString(key, value, size) > 0;
+  }
+  bool setByKey(const char* key, const char* value) override {
+    return prefs.putString(key, value) == strlen(value);
+  }
+};
+
 class MyMesh : public SensorMesh {
-  mesh::GroupChannel weather_channel{};
+  WatchSettings watch_settings;
+  SensorWatch watch;
 
 public:
   using SensorMesh::SensorMesh;
 
   void begin() {
-    constexpr uint8_t name[] = "#m7ojc";
-    mesh::Utils::sha256(weather_channel.secret, CIPHER_KEY_SIZE, name, sizeof(name) - 1);
-    mesh::Utils::sha256(weather_channel.hash, sizeof(weather_channel.hash), weather_channel.secret, CIPHER_KEY_SIZE);
+    if (watch_settings.begin()) watch.begin(watch_settings);
     SensorMesh::begin(&SPIFFS);
   }
 
 protected:
   int searchChannelsByHash(const uint8_t* hash, mesh::GroupChannel channels[], int max_matches) override {
-    if (max_matches <= 0 || hash[0] != weather_channel.hash[0]) return 0;
-    channels[0] = weather_channel;
-    return 1;
+    return watch.searchChannels(hash, channels, max_matches);
   }
 
   void onGroupDataRecv(mesh::Packet* packet, uint8_t type, const mesh::GroupChannel& channel,
                        uint8_t* data, size_t len) override {
-    if (type != PAYLOAD_TYPE_GRP_TXT || len <= 5 || (data[4] >> 2) != TXT_TYPE_PLAIN) return;
-    data[len] = 0;
-    const char* separator = strstr(reinterpret_cast<const char*>(&data[5]), ": ");
-    if (!separator) return;
-    const char* cmd = separator + 2;
-    if (strcasecmp(cmd, "wx") && strcasecmp(cmd, "sensor") && strcasecmp(cmd, "sensors")) return;
+    if (!watch.matches(type, channel, data, len)) return;
 
     sampleEnvironment();
     Weather::Readings readings;
@@ -49,6 +55,7 @@ protected:
   }
 
   bool handleCustomCommand(uint32_t, char* command, char* reply) override {
+    if (watch.handleCommand(command, reply)) return true;
     if (!strcmp(command, "pm")) {
       PM25_AQI_Data sample;
       if (sensors.readPMSA003I(sample)) {
