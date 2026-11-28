@@ -41,7 +41,7 @@ protected:
     const char* separator = strstr(reinterpret_cast<const char*>(&data[5]), ": ");
     if (!separator) return;
     const char* command = separator + 2;
-    if (strcasecmp(command, "wx") != 0 && strcasecmp(command, "sensors") != 0) return;
+    if (strcasecmp(command, "wx") != 0 && strcasecmp(command, "sensor") != 0 && strcasecmp(command, "sensors") != 0) return;
 
     sampleEnvironment();
     const uint8_t bme = sensors.getSensorChannel("BME680");

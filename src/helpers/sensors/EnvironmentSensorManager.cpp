@@ -378,16 +378,17 @@ static uint8_t init_scd41(TwoWire* wire, uint8_t) {
 }
 
 static void query_scd41(uint8_t ch, uint8_t, CayenneLPP& lpp) {
+  constexpr uint32_t max_sample_age_ms = 15000;
   static uint16_t co2_ppm = 0;
   static uint32_t last_sample_ms = 0;
-  uint16_t status;
-  if (!scd41ReadWord(*TELEM_WIRE, 0xE4B8, status)) return;
-  if (status & 0x07FF) {  // A nonzero value in the low 11 bits means a sample is ready.
-    if (!scd41ReadWord(*TELEM_WIRE, 0xEC05, co2_ppm)) return;
+  uint16_t status, sample;
+  if (scd41ReadWord(*TELEM_WIRE, 0xE4B8, status) && (status & 0x07FF) &&
+      scd41ReadWord(*TELEM_WIRE, 0xEC05, sample) && sample != 0) {
+    co2_ppm = sample;
     last_sample_ms = millis();
   }
-  // A read consumes the sample. Share it with other clients for one measurement interval.
-  if (co2_ppm != 0 && millis() - last_sample_ms < 5000) {
+  // A read consumes the sample. Keep a recent reading through a late conversion or failed read.
+  if (co2_ppm != 0 && millis() - last_sample_ms < max_sample_age_ms) {
     lpp.addConcentration(ch, co2_ppm);
   }
 }
