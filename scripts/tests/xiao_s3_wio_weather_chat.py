@@ -36,9 +36,10 @@ async def check(port, index, name):
                 raise RuntimeError(f"Could not send {command}")
             reply = await asyncio.wait_for(replies.get(), timeout=20)
             assert len(reply.encode("utf-8")) <= 160, reply
-            assert len(reply.splitlines()) == 3, reply
-            assert all(unit in reply for unit in ("°C", "% RH", "hPa", "ppm", "kΩ")), reply
-            assert int(reply.splitlines()[1].split()[1]) > 0, reply
+            assert len(reply.splitlines()) == 4, reply
+            assert all(unit in reply for unit in ("°C", "%", "hPa", "ppm", "kΩ", "µg/m³")), reply
+            assert "PM1/2.5/10" in reply.splitlines()[3], reply
+            assert int(reply.splitlines()[1][len("CO₂ "):].split("ppm")[0]) > 0, reply
             print(reply)
     finally:
         await companion.disconnect()

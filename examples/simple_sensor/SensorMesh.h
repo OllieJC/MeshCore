@@ -3,7 +3,9 @@
 #include <Arduino.h>   // needed for PlatformIO
 #include <Mesh.h>
 
+#ifndef SENSOR_DISABLE_TIME_SERIES
 #include "TimeSeriesData.h"
+#endif
 
 #if defined(NRF52_PLATFORM) || defined(STM32_PLATFORM)
 #include <InternalFileSystem.h>
@@ -84,6 +86,10 @@ public:
 
   float getTelemValue(uint8_t channel, uint8_t type, float fallback = 0.0f);
 
+#if ENV_INCLUDE_PMSA003I
+  bool getParticulateMatter(uint16_t& pm1, uint16_t& pm25, uint16_t& pm10);
+#endif
+
   void sendFloodScoped(const TransportKey& scope, mesh::Packet* pkt, uint32_t delay_millis, uint8_t path_hash_size);
   void sendFloodReply(mesh::Packet* packet, unsigned long delay_millis, uint8_t path_hash_size);
 
@@ -121,7 +127,9 @@ protected:
   void alertIf(bool condition, Trigger& t, AlertPriority pri, const char* text);
 
   virtual void onSensorDataRead() = 0;   // for app to implement
+#ifndef SENSOR_DISABLE_TIME_SERIES
   virtual int querySeriesData(uint32_t start_secs_ago, uint32_t end_secs_ago, MinMaxAvg dest[], int max_num) = 0;  // for app to implement
+#endif
   virtual bool handleCustomCommand(uint32_t sender_timestamp, char* command, char* reply) { return false; }
 
   // Mesh overrides

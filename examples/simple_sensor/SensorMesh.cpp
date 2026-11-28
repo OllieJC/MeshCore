@@ -162,6 +162,7 @@ uint8_t SensorMesh::handleRequest(ClientInfo* from, uint32_t sender_timestamp, u
     memcpy(&reply_data[4], telemetry.getBuffer(), tlen);
     return 4 + tlen;  // reply_len
   }
+#ifndef SENSOR_DISABLE_TIME_SERIES
   if (req_type == REQ_TYPE_GET_AVG_MIN_MAX && (perms & PERM_ACL_ROLE_MASK) >= PERM_ACL_READ_ONLY) {
     uint32_t start_secs_ago, end_secs_ago;
     memcpy(&start_secs_ago, &payload[0], 4);
@@ -196,6 +197,7 @@ uint8_t SensorMesh::handleRequest(ClientInfo* from, uint32_t sender_timestamp, u
     }
     return ofs;
   }
+#endif
   if (req_type == REQ_TYPE_GET_ACCESS_LIST && (perms & PERM_ACL_ROLE_MASK) == PERM_ACL_ADMIN) {
     uint8_t res1 = payload[0];   // reserved for future  (extra query params)
     uint8_t res2 = payload[1];
@@ -989,6 +991,18 @@ float SensorMesh::getTelemValue(uint8_t channel, uint8_t type, float fallback) {
   return findTelemValue(telemetry.getBuffer(), telemetry.getSize(), channel, type, fallback);
 }
 
+#if ENV_INCLUDE_PMSA003I
+bool SensorMesh::getParticulateMatter(uint16_t& pm1, uint16_t& pm25, uint16_t& pm10) {
+  LPPReader reader(telemetry.getBuffer(), telemetry.getSize());
+  uint8_t channel, type;
+  while (reader.readHeader(channel, type)) {
+    if (type == LPP_AIR_QUALITY) return reader.readParticulateMatter(pm1, pm25, pm10);
+    reader.skipData(type);
+  }
+  return false;
+}
+#endif
+
 bool  SensorMesh::getGPS(uint8_t channel, float& lat, float& lon, float& alt) {
   if (channel == TELEM_CHANNEL_SELF) {
     lat = sensors.node_lat;
@@ -1030,7 +1044,8 @@ void SensorMesh::loop() {
   }
 
   uint32_t curr = getRTCClock()->getCurrentTime();
-  if (curr >= last_read_time + SENSOR_READ_INTERVAL_SECS) {
+  // A backwards clock correction must not suspend sensing until the old time returns.
+  if (curr < last_read_time || curr - last_read_time >= SENSOR_READ_INTERVAL_SECS) {
     telemetry.reset();
     telemetry.addVoltage(TELEM_CHANNEL_SELF, (float)board.getBattMilliVolts() / 1000.0f);
     // query other sensors -- target specific
