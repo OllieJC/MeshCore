@@ -129,6 +129,9 @@ protected:
   bool getCADEnabled() const override;
   int getAGCResetInterval() const override;
   mesh::DispatcherAction onRecvPacket(mesh::Packet* pkt) override;
+#if SENSOR_PUBLIC_TELEMETRY
+  void onAdvertRecv(mesh::Packet* packet, const mesh::Identity& id, uint32_t timestamp, const uint8_t* app_data, size_t app_data_len) override;
+#endif
   void onAnonDataRecv(mesh::Packet* packet, const uint8_t* secret, const mesh::Identity& sender, uint8_t* data, size_t len) override;
   int searchPeersByHash(const uint8_t* hash) override;
   void getPeerSharedSecret(uint8_t* dest_secret, int peer_idx) override;
@@ -144,6 +147,9 @@ private:
   unsigned long next_local_advert, next_flood_advert;
   NodePrefs _prefs;
   ClientACL  acl;
+#if SENSOR_PUBLIC_TELEMETRY
+  ClientACL public_readers;  // Volatile peers, separate from the saved access list.
+#endif
   CommonCLI _cli;
   uint8_t reply_data[MAX_PACKET_PAYLOAD];
   unsigned long dirty_contacts_expiry;
@@ -154,7 +160,7 @@ private:
   RegionEntry* load_stack[8];
   TransportKey default_scope;
   uint32_t last_read_time;
-  int matching_peer_indexes[MAX_SEARCH_RESULTS];
+  ClientInfo* matching_peers[MAX_SEARCH_RESULTS];
   int num_alert_tasks;
   Trigger* alert_tasks[MAX_CONCURRENT_ALERTS];
   unsigned long set_radio_at, revert_radio_at;

@@ -564,24 +564,38 @@ void SensorMesh::onAnonDataRecv(mesh::Packet* packet, const uint8_t* secret, con
   }
 }
 
+#if SENSOR_PUBLIC_TELEMETRY
+void SensorMesh::onAdvertRecv(mesh::Packet*, const mesh::Identity& id, uint32_t, const uint8_t* app_data, size_t app_data_len) {
+  // A companion's encrypted telemetry request carries only its one-byte key prefix.
+  if (app_data_len == 0 || (app_data[0] & 0x0F) != ADV_TYPE_CHAT || acl.getClient(id.pub_key, PUB_KEY_SIZE)) return;
+
+  auto reader = public_readers.getClient(id.pub_key, PUB_KEY_SIZE);
+  if (!reader) {
+    reader = public_readers.putClient(id, PERM_ACL_GUEST);
+    self_id.calcSharedSecret(reader->shared_secret, id);
+  }
+  reader->last_activity = getRTCClock()->getCurrentTime();
+}
+#endif
+
 int SensorMesh::searchPeersByHash(const uint8_t* hash) {
+  ClientACL* const tables[] = { &acl,
+#if SENSOR_PUBLIC_TELEMETRY
+    &public_readers,
+#endif
+  };
   int n = 0;
-  for (int i = 0; i < acl.getNumClients() && n < MAX_SEARCH_RESULTS; i++) {
-    if (acl.getClientByIdx(i)->id.isHashMatch(hash)) {
-      matching_peer_indexes[n++] = i;  // store the INDEXES of matching contacts (for subsequent 'peer' methods)
+  for (auto table : tables) {
+    for (int i = 0; i < table->getNumClients() && n < MAX_SEARCH_RESULTS; i++) {
+      auto peer = table->getClientByIdx(i);
+      if (peer->id.isHashMatch(hash)) matching_peers[n++] = peer;
     }
   }
   return n;
 }
 
 void SensorMesh::getPeerSharedSecret(uint8_t* dest_secret, int peer_idx) {
-  int i = matching_peer_indexes[peer_idx];
-  if (i >= 0 && i < acl.getNumClients()) {
-    // lookup pre-calculated shared_secret
-    memcpy(dest_secret, acl.getClientByIdx(i)->shared_secret, PUB_KEY_SIZE);
-  } else {
-    MESH_DEBUG_PRINTLN("getPeerSharedSecret: Invalid peer idx: %d", i);
-  }
+  memcpy(dest_secret, matching_peers[peer_idx]->shared_secret, PUB_KEY_SIZE);
 }
 
 void SensorMesh::sendAckTo(const ClientInfo& dest, uint32_t ack_hash, uint8_t path_hash_size) {
@@ -602,13 +616,7 @@ void SensorMesh::sendAckTo(const ClientInfo& dest, uint32_t ack_hash, uint8_t pa
 }
 
 void SensorMesh::onPeerDataRecv(mesh::Packet* packet, uint8_t type, int sender_idx, const uint8_t* secret, uint8_t* data, size_t len) {
-  int i = matching_peer_indexes[sender_idx];
-  if (i < 0 || i >= acl.getNumClients()) {
-    MESH_DEBUG_PRINTLN("onPeerDataRecv: Invalid sender idx: %d", i);
-    return;
-  }
-
-  ClientInfo* from = acl.getClientByIdx(i);
+  ClientInfo* from = matching_peers[sender_idx];
 
   if (type == PAYLOAD_TYPE_REQ) {  // request (from a known contact)
     uint32_t timestamp;
@@ -743,13 +751,7 @@ void SensorMesh::onControlDataRecv(mesh::Packet* packet) {
 }
 
 bool SensorMesh::onPeerPathRecv(mesh::Packet* packet, int sender_idx, const uint8_t* secret, uint8_t* path, uint8_t path_len, uint8_t extra_type, uint8_t* extra, uint8_t extra_len) {
-  int i = matching_peer_indexes[sender_idx];
-  if (i < 0 || i >= acl.getNumClients()) {
-    MESH_DEBUG_PRINTLN("onPeerPathRecv: Invalid sender idx: %d", i);
-    return false;
-  }
-
-  ClientInfo* from = acl.getClientByIdx(i);
+  ClientInfo* from = matching_peers[sender_idx];
 
   MESH_DEBUG_PRINTLN("PATH to contact, path_len=%d", (uint32_t) path_len);
   // NOTE: for this impl, we just replace the current 'out_path' regardless, whenever sender sends us a new out_path.
