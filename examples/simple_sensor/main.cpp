@@ -15,15 +15,19 @@ public:
 
 protected:
   /* ========================== custom logic here ========================== */
+#ifndef SENSOR_DISABLE_BATTERY_ALERTS
   Trigger low_batt, critical_batt;
+#endif
   TimeSeriesData  battery_data;
 
   void onSensorDataRead() override {
     float batt_voltage = getVoltage(TELEM_CHANNEL_SELF);
 
     battery_data.recordData(getRTCClock(), batt_voltage);   // record battery
+#ifndef SENSOR_DISABLE_BATTERY_ALERTS
     alertIf(batt_voltage < 3.4f, critical_batt, HIGH_PRI_ALERT, "Battery is critical!");
     alertIf(batt_voltage < 3.6f, low_batt, LOW_PRI_ALERT, "Battery is low");
+#endif
   }
 
   int querySeriesData(uint32_t start_secs_ago, uint32_t end_secs_ago, MinMaxAvg dest[], int max_num) override {

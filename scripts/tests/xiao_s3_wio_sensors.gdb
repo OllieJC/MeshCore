@@ -1,9 +1,15 @@
-# Hardware smoke test. Connect the SCD41 and Pimoroni MiCS-6814 on D4/D5.
+# Hardware smoke test. Connect the SCD41 and Pimoroni MiCS-6814 on D4/D5 and power via USB.
 # After one minute of sampling, run OpenOCD with board/esp32s3-builtin.cfg,
 # then xtensa-esp32s3-elf-gdb -batch firmware.elf -x this-file.
 target remote localhost:3333
 set $size = the_mesh.telemetry._cursor
 set $buf = the_mesh.telemetry._buffer
+
+if the_mesh.num_alert_tasks != 0
+  echo Unexpected alert queued on the USB-powered sensor\n
+  detach
+  quit 1
+end
 
 # The last environmental records precede the XIAO's four-byte MCU temperature.
 if $size < 26 || $buf[$size-4] != 1 || $buf[$size-3] != 103
