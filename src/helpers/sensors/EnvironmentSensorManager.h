@@ -3,6 +3,9 @@
 #include <Mesh.h>
 #include <helpers/SensorManager.h>
 #include <helpers/sensors/LocationProvider.h>
+#if ENV_INCLUDE_PMSA003I
+#include <Adafruit_PM25AQI_I2C.h>
+#endif
 
 class EnvironmentSensorManager : public SensorManager {
 protected:
@@ -43,6 +46,9 @@ public:
   EnvironmentSensorManager(){};
   #endif
   bool begin() override;
+  #if ENV_INCLUDE_PMSA003I
+  bool readPMSA003I(PM25_AQI_Data& sample);
+  #endif
   bool querySensors(uint8_t requester_permissions, CayenneLPP& telemetry) override;
   uint8_t getSensorChannel(const char* name, uint8_t sub_channel = 0) const;
   #if ENV_INCLUDE_GPS || defined(ENV_INCLUDE_BME680_BSEC)
