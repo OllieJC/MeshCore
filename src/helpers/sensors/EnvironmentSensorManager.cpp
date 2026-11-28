@@ -774,6 +774,17 @@ bool EnvironmentSensorManager::begin() {
 // initialized.
 // ============================================================
 
+uint8_t EnvironmentSensorManager::getSensorChannel(const char* name, uint8_t sub_channel) const {
+  for (size_t i = 0; i < SENSOR_TABLE_SIZE; i++) {
+    if (strcmp(SENSOR_TABLE[i].name, name) != 0) continue;
+    for (int j = 0; j < _active_sensor_count; j++) {
+      const auto& sensor = _active_sensors[j];
+      if (sensor.query == SENSOR_TABLE[i].query && sensor.sub_channel == sub_channel) return TELEM_CHANNEL_SELF + 1 + j;
+    }
+  }
+  return 0;
+}
+
 bool EnvironmentSensorManager::querySensors(uint8_t requester_permissions, CayenneLPP& telemetry) {
   next_available_channel = TELEM_CHANNEL_SELF + 1;
 

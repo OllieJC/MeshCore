@@ -67,6 +67,8 @@ class LPPData {
 public:
   static uint8_t getDataSize(uint8_t type) {
     switch (type) {
+      case LPP_RELATIVE_HUMIDITY:
+        return 1;
       case LPP_GPS:
         return 9;
       case LPP_POLYLINE:
@@ -88,7 +90,6 @@ public:
       case LPP_TEMPERATURE:
       case LPP_CONCENTRATION:
       case LPP_BAROMETRIC_PRESSURE:
-      case LPP_RELATIVE_HUMIDITY:
       case LPP_ALTITUDE:
       case LPP_VOLTAGE:
       case LPP_CURRENT:
@@ -111,8 +112,9 @@ public:
         return 100;
       case LPP_TEMPERATURE:
       case LPP_BAROMETRIC_PRESSURE:
-      case LPP_RELATIVE_HUMIDITY:
         return 10;
+      case LPP_RELATIVE_HUMIDITY:
+        return LPP_RELATIVE_HUMIDITY_MULT;
     }
     return 1;
   }

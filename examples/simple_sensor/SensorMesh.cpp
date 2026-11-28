@@ -985,8 +985,8 @@ void SensorMesh::formatPacketStatsReply(char *reply) {
                                        getNumRecvFlood(), getNumRecvDirect());
 }
 
-float SensorMesh::getTelemValue(uint8_t channel, uint8_t type) {
-  return findTelemValue(telemetry.getBuffer(), telemetry.getSize(), channel, type, 0.0f);
+float SensorMesh::getTelemValue(uint8_t channel, uint8_t type, float fallback) {
+  return findTelemValue(telemetry.getBuffer(), telemetry.getSize(), channel, type, fallback);
 }
 
 bool  SensorMesh::getGPS(uint8_t channel, float& lat, float& lon, float& alt) {

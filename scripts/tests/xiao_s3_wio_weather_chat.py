@@ -1,0 +1,46 @@
+"""Send wx and sensors on #m7ojc and check the flashed XIAO's channel replies.
+
+Usage: python xiao_s3_wio_weather_chat.py COMPANION_PORT CHANNEL_INDEX SENSOR_NAME
+The companion must already have #m7ojc configured. Requires the meshcore Python package.
+"""
+
+import asyncio
+import sys
+
+from meshcore import EventType, MeshCore
+
+
+async def check(port, index, name):
+    channel = int(index)
+    companion = await MeshCore.create_serial(port)
+    if companion is None:
+        raise RuntimeError("Could not connect to companion")
+    try:
+        info = await companion.commands.get_channel(channel)
+        if info.type != EventType.CHANNEL_INFO or info.payload["channel_name"] != "#m7ojc":
+            raise RuntimeError("Expected #m7ojc in the configured channel slot")
+
+        replies = asyncio.Queue()
+
+        async def receive(event):
+            text = event.payload["text"]
+            if event.payload["channel_idx"] == channel and text.startswith(name + ": "):
+                await replies.put(text)
+
+        companion.subscribe(EventType.CHANNEL_MSG_RECV, receive)
+        await companion.start_auto_message_fetching()
+        for command in ("wx", "sensors"):
+            sent = await companion.commands.send_chan_msg(channel, command)
+            if sent.type != EventType.OK:
+                raise RuntimeError(f"Could not send {command}")
+            reply = await asyncio.wait_for(replies.get(), timeout=20)
+            assert len(reply.encode("utf-8")) <= 160, reply
+            assert len(reply.splitlines()) == 3, reply
+            assert all(unit in reply for unit in ("°C", "% RH", "hPa", "ppm", "kΩ")), reply
+            print(reply)
+    finally:
+        await companion.disconnect()
+
+
+if __name__ == "__main__":
+    asyncio.run(check(*sys.argv[1:]))

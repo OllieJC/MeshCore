@@ -82,12 +82,17 @@ public:
   bool saveRegions() override;
   void onDefaultRegionChanged(const RegionEntry* r) override;
 
-  float getTelemValue(uint8_t channel, uint8_t type);
+  float getTelemValue(uint8_t channel, uint8_t type, float fallback = 0.0f);
 
   void sendFloodScoped(const TransportKey& scope, mesh::Packet* pkt, uint32_t delay_millis, uint8_t path_hash_size);
   void sendFloodReply(mesh::Packet* packet, unsigned long delay_millis, uint8_t path_hash_size);
 
 protected:
+  void sampleEnvironment() {
+    telemetry.reset();
+    sensors.querySensors(TELEM_PERM_ENVIRONMENT, telemetry);
+  }
+
   // current telemetry data queries
   float getVoltage(uint8_t channel) { return getTelemValue(channel, LPP_VOLTAGE); }
   float getCurrent(uint8_t channel) { return getTelemValue(channel, LPP_CURRENT); }
