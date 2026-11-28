@@ -93,7 +93,10 @@ static SensirionI2cSht4x SHT4X;
 
 #if ENV_INCLUDE_MICS6814
 #include <GasBreakout.h>
-static GasBreakout mics6814(*TELEM_WIRE);
+#ifndef TELEM_MICS6814_ADDRESS
+#define TELEM_MICS6814_ADDRESS GasBreakout::DEFAULT_I2C_ADDRESS
+#endif
+static GasBreakout mics6814(*TELEM_WIRE, TELEM_MICS6814_ADDRESS);
 #endif
 
 #if ENV_INCLUDE_LPS22HB
@@ -690,7 +693,7 @@ static const SensorDef SENSOR_TABLE[] = {
   { SCD41_ADDRESS,         "SCD41",        init_scd41,    query_scd41    },
 #endif
 #if ENV_INCLUDE_MICS6814
-  { GasBreakout::DEFAULT_I2C_ADDRESS, "MiCS-6814", init_mics6814, query_mics6814 },
+  { TELEM_MICS6814_ADDRESS, "MiCS-6814", init_mics6814, query_mics6814 },
 #endif
   { 0, nullptr, nullptr, nullptr }  // sentinel — keeps the array non-empty
 };
